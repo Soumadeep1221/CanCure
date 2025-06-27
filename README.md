@@ -53,21 +53,7 @@ prediction = model.predict(img_array)
 
 | Frontend         | Backend         | AI / ML       | APIs / Services     |
 |------------------|------------------|---------------|----------------------|
-| React, Tailwind  | Node.js, Express | TensorFlow    | OpenAI (chat), ZegoCloud (video), Firebase (auth) |
-
----
-
-## 📂 Project Structure
-
-```
-📦 project-root/
-├── 📁 models/              # Trained ML models (.h5 files)
-├── 📁 uploads/             # Temp uploaded images
-├── 📁 templates/           # HTML templates (Flask)
-├── main.py                # Flask backend
-├── frontend/              # React frontend app
-├── README.md              # Project documentation
-```
+| React, Tailwind  | Node.js, Express | TensorFlow , FastAPI| OpenAI (chat) |
 
 ---
 
@@ -132,12 +118,5 @@ npm run dev
 
 ---
 
-## 📬 Contact
-
-**Project Team:** *Your Names*  
-**Email:** youremail@example.com  
-**GitHub:** [@yourusername](https://github.com/yourusername)
-
----
 
 > *“Fighting cancer with compassion, connection, and code.”*
