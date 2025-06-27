@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Pill, Calendar, Clock, FileText } from "lucide-react"
+import { Pill, Calendar, Clock, FileText, RefreshCw } from "lucide-react"
 import Navigation from "@/components/navigation"
+import { getUserById } from "@/lib/local-storage"
+import { Button } from "@/components/ui/button"
 
 interface Prescription {
   id: string
@@ -52,13 +54,22 @@ export default function Prescriptions() {
     }
 
     const parsedUser = JSON.parse(userData)
-    if (parsedUser.userType !== "patient") {
+    if (parsedUser.userType !== "patient" && parsedUser.user_type !== "patient") {
       router.push("/")
       return
     }
 
-    setUser(parsedUser)
-    setPrescriptions(parsedUser.prescriptions || [])
+    // Get the latest user data from storage
+    const latestUser = getUserById(parsedUser.id)
+    if (latestUser) {
+      setUser(latestUser)
+      setPrescriptions(latestUser.prescriptions || [])
+      localStorage.setItem("currentUser", JSON.stringify(latestUser))
+    } else {
+      setUser(parsedUser)
+      setPrescriptions(parsedUser.prescriptions || [])
+    }
+    
     setIsLoading(false)
   }, [router])
 
@@ -72,6 +83,19 @@ export default function Prescriptions() {
         return "bg-red-600"
       default:
         return "bg-gray-600"
+    }
+  }
+
+  const refreshPrescriptions = () => {
+    const userData = localStorage.getItem("currentUser")
+    if (userData) {
+      const parsedUser = JSON.parse(userData)
+      const latestUser = getUserById(parsedUser.id)
+      if (latestUser) {
+        setUser(latestUser)
+        setPrescriptions(latestUser.prescriptions || [])
+        localStorage.setItem("currentUser", JSON.stringify(latestUser))
+      }
     }
   }
 
@@ -98,12 +122,22 @@ export default function Prescriptions() {
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">
-              <Pill className="h-8 w-8" />
-              My Prescriptions
-            </h1>
-            <p className="text-gray-400">View and manage your medical prescriptions</p>
+          <div className="mb-8 flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">
+                <Pill className="h-8 w-8" />
+                My Prescriptions
+              </h1>
+              <p className="text-gray-400">View and manage your medical prescriptions</p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={refreshPrescriptions}
+              className="border-gray-600 text-gray-300 hover:bg-gray-800 bg-transparent"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
           </div>
 
           {/* Stats */}

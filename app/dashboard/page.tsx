@@ -6,8 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Activity, Brain, Users, FileText, TrendingUp, Calendar, Target, Award, Heart, Pill } from "lucide-react"
+import { Activity, Brain, Users, FileText, TrendingUp, Calendar, Target, Award, Heart, Pill, RefreshCw } from "lucide-react"
 import Navigation from "@/components/navigation"
+import { getUserById } from "@/lib/local-storage"
 
 interface User {
   id: string
@@ -67,19 +68,27 @@ export default function Dashboard() {
     }
 
     const parsedUser = JSON.parse(userData)
-    if (parsedUser.userType !== "patient") {
+    if (parsedUser.userType !== "patient" && parsedUser.user_type !== "patient") {
       router.push("/")
       return
     }
 
-    setUser(parsedUser)
+    // Get the latest user data from storage
+    const latestUser = getUserById(parsedUser.id)
+    if (latestUser) {
+      setUser(latestUser)
+      localStorage.setItem("currentUser", JSON.stringify(latestUser))
+    } else {
+      setUser(parsedUser)
+    }
+    
     setIsLoading(false)
 
     // Calculate overall progress
     let progress = 0
-    if (parsedUser.assessmentCompleted) progress += 40
-    if (parsedUser.communityPosts > 0) progress += 30
-    if (parsedUser.dietPlanGenerated) progress += 30
+    if (latestUser?.assessmentCompleted || parsedUser.assessmentCompleted) progress += 40
+    if ((latestUser?.communityPosts || parsedUser.communityPosts || 0) > 0) progress += 30
+    if (latestUser?.dietPlanGenerated || parsedUser.dietPlanGenerated) progress += 30
 
     setOverallProgress(progress)
   }, [router])
@@ -94,6 +103,25 @@ export default function Dashboard() {
 
   const handleGenerateDietPlan = () => {
     router.push("/diet-plan")
+  }
+
+  const refreshDashboard = () => {
+    const userData = localStorage.getItem("currentUser")
+    if (userData) {
+      const parsedUser = JSON.parse(userData)
+      const latestUser = getUserById(parsedUser.id)
+      if (latestUser) {
+        setUser(latestUser)
+        localStorage.setItem("currentUser", JSON.stringify(latestUser))
+        
+        // Recalculate progress with safe fallbacks
+        let progress = 0
+        if (latestUser.assessmentCompleted) progress += 40
+        if ((latestUser.communityPosts || 0) > 0) progress += 30
+        if (latestUser.dietPlanGenerated) progress += 30
+        setOverallProgress(progress)
+      }
+    }
   }
 
   if (isLoading) {
@@ -112,7 +140,27 @@ export default function Dashboard() {
     )
   }
 
-  const joinDays = Math.floor((new Date().getTime() - new Date(user.joinDate).getTime()) / (1000 * 60 * 60 * 24))
+  // Calculate join days with fallback
+  const joinDate = user.joinDate || user.created_at || new Date().toISOString()
+  const joinDays = Math.floor((new Date().getTime() - new Date(joinDate).getTime()) / (1000 * 60 * 60 * 24)) || 0
+
+  // Ensure all numerical values have fallbacks
+  const communityPosts = user.communityPosts || 0
+  const assessmentCompleted = user.assessmentCompleted || false
+  const dietPlanGenerated = user.dietPlanGenerated || false
+  const riskLevel = user.riskLevel || "N/A"
+  
+  // Safe calculations for arrays
+  const emotionalGoals = user.emotionalGoals || []
+  const appointments = user.appointments || []
+  const prescriptions = user.prescriptions || []
+  
+  const activeGoals = emotionalGoals.filter((g) => g.status === "active").length || 0
+  const completedGoals = emotionalGoals.filter((g) => g.status === "completed").length || 0
+  const confirmedAppointments = appointments.filter((a) => a.status === "confirmed").length || 0
+  const pendingAppointments = appointments.filter((a) => a.status === "requested").length || 0
+  const activePrescriptions = prescriptions.filter((p) => p.status === "active").length || 0
+  const totalMedications = prescriptions.reduce((total, p) => total + (p.medications?.length || 0), 0) || 0
 
   return (
     <div className="min-h-screen bg-gray-950">
@@ -120,9 +168,19 @@ export default function Dashboard() {
 
       <div className="container mx-auto px-4 py-8">
         {/* Welcome Section */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Welcome back, {user.name}!</h1>
-          <p className="text-gray-400">Track your health journey and connect with our supportive community</p>
+        <div className="mb-8 flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">Welcome back, {user.name}!</h1>
+            <p className="text-gray-400">Track your health journey and connect with our supportive community</p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={refreshDashboard}
+            className="border-gray-600 text-gray-300 hover:bg-gray-800 bg-transparent"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
         </div>
 
         {/* Progress Overview */}
@@ -146,32 +204,32 @@ export default function Dashboard() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${user.assessmentCompleted ? "bg-green-600" : "bg-gray-700"}`}>
+                  <div className={`p-2 rounded-lg ${assessmentCompleted ? "bg-green-600" : "bg-gray-700"}`}>
                     <FileText className="h-4 w-4 text-white" />
                   </div>
                   <div>
                     <p className="text-white text-sm font-medium">Assessment</p>
-                    <p className="text-gray-400 text-xs">{user.assessmentCompleted ? "Completed" : "Not started"}</p>
+                    <p className="text-gray-400 text-xs">{assessmentCompleted ? "Completed" : "Not started"}</p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${user.communityPosts > 0 ? "bg-green-600" : "bg-gray-700"}`}>
+                  <div className={`p-2 rounded-lg ${communityPosts > 0 ? "bg-green-600" : "bg-gray-700"}`}>
                     <Users className="h-4 w-4 text-white" />
                   </div>
                   <div>
                     <p className="text-white text-sm font-medium">Community</p>
-                    <p className="text-gray-400 text-xs">{user.communityPosts} posts</p>
+                    <p className="text-gray-400 text-xs">{communityPosts} posts</p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${user.dietPlanGenerated ? "bg-green-600" : "bg-gray-700"}`}>
+                  <div className={`p-2 rounded-lg ${dietPlanGenerated ? "bg-green-600" : "bg-gray-700"}`}>
                     <Brain className="h-4 w-4 text-white" />
                   </div>
                   <div>
                     <p className="text-white text-sm font-medium">Diet Plan</p>
-                    <p className="text-gray-400 text-xs">{user.dietPlanGenerated ? "Generated" : "Not created"}</p>
+                    <p className="text-gray-400 text-xs">{dietPlanGenerated ? "Generated" : "Not created"}</p>
                   </div>
                 </div>
               </div>
@@ -202,7 +260,7 @@ export default function Dashboard() {
                   <Target className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white">{user.riskLevel || "N/A"}</p>
+                  <p className="text-2xl font-bold text-white">{riskLevel}</p>
                   <p className="text-gray-400 text-sm">Risk Level</p>
                 </div>
               </div>
@@ -216,7 +274,7 @@ export default function Dashboard() {
                   <Users className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white">{user.communityPosts}</p>
+                  <p className="text-2xl font-bold text-white">{communityPosts}</p>
                   <p className="text-gray-400 text-sm">Community Posts</p>
                 </div>
               </div>
@@ -247,21 +305,21 @@ export default function Dashboard() {
                 Health Assessment
               </CardTitle>
               <CardDescription>
-                {user.assessmentCompleted
+                {assessmentCompleted
                   ? "View your latest assessment results"
                   : "Complete your cancer risk assessment"}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {user.assessmentCompleted ? (
+                {assessmentCompleted ? (
                   <div className="space-y-2">
                     <Badge variant="secondary" className="bg-green-600 text-white">
                       Completed
                     </Badge>
-                    {user.riskLevel && (
+                    {riskLevel !== "N/A" && (
                       <p className="text-sm text-gray-400">
-                        Risk Level: <span className="text-white">{user.riskLevel}</span>
+                        Risk Level: <span className="text-white">{riskLevel}</span>
                       </p>
                     )}
                     {user.lastAssessment && (
@@ -274,7 +332,7 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-400">Start your health journey by completing the assessment</p>
                 )}
                 <Button onClick={handleStartAssessment} className="w-full bg-blue-600 hover:bg-blue-700">
-                  {user.assessmentCompleted ? "Retake Assessment" : "Start Assessment"}
+                  {assessmentCompleted ? "Retake Assessment" : "Start Assessment"}
                 </Button>
               </div>
             </CardContent>
@@ -292,7 +350,7 @@ export default function Dashboard() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <p className="text-sm text-gray-400">
-                    Your posts: <span className="text-white">{user.communityPosts}</span>
+                    Your posts: <span className="text-white">{communityPosts}</span>
                   </p>
                   <p className="text-sm text-gray-400">
                     Community members: <span className="text-white">1,247</span>
@@ -315,7 +373,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {user.dietPlanGenerated ? (
+                {dietPlanGenerated ? (
                   <Badge variant="secondary" className="bg-green-600 text-white">
                     Plan Generated
                   </Badge>
@@ -325,7 +383,7 @@ export default function Dashboard() {
                   </p>
                 )}
                 <Button onClick={handleGenerateDietPlan} className="w-full bg-orange-600 hover:bg-orange-700">
-                  {user.dietPlanGenerated ? "View Diet Plan" : "Generate Plan"}
+                  {dietPlanGenerated ? "View Diet Plan" : "Generate Plan"}
                 </Button>
               </div>
             </CardContent>
@@ -348,13 +406,13 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-400">
                     Active goals:{" "}
                     <span className="text-white">
-                      {user.emotionalGoals?.filter((g) => g.status === "active").length || 0}
+                      {activeGoals}
                     </span>
                   </p>
                   <p className="text-sm text-gray-400">
                     Completed:{" "}
                     <span className="text-white">
-                      {user.emotionalGoals?.filter((g) => g.status === "completed").length || 0}
+                      {completedGoals}
                     </span>
                   </p>
                 </div>
@@ -382,13 +440,13 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-400">
                     Upcoming:{" "}
                     <span className="text-white">
-                      {user.appointments?.filter((a) => a.status === "confirmed").length || 0}
+                      {confirmedAppointments}
                     </span>
                   </p>
                   <p className="text-sm text-gray-400">
                     Pending:{" "}
                     <span className="text-white">
-                      {user.appointments?.filter((a) => a.status === "requested").length || 0}
+                      {pendingAppointments}
                     </span>
                   </p>
                 </div>
@@ -416,13 +474,13 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-400">
                     Active prescriptions:{" "}
                     <span className="text-white">
-                      {user.prescriptions?.filter((p) => p.status === "active").length || 0}
+                      {activePrescriptions}
                     </span>
                   </p>
                   <p className="text-sm text-gray-400">
                     Total medications:{" "}
                     <span className="text-white">
-                      {user.prescriptions?.reduce((total, p) => total + p.medications.length, 0) || 0}
+                      {totalMedications}
                     </span>
                   </p>
                 </div>

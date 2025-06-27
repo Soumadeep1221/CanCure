@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Users, MessageCircle, Heart, Share2, Plus, TrendingUp, Smile, Frown, Meh } from "lucide-react"
 import Navigation from "@/components/navigation"
+import { updateUserData } from "@/lib/local-storage"
 
 interface Post {
   id: string
@@ -46,7 +47,7 @@ export default function Community() {
     }
 
     const parsedUser = JSON.parse(userData)
-    if (parsedUser.userType !== "patient") {
+    if (parsedUser.userType !== "patient" && parsedUser.user_type !== "patient") {
       router.push("/")
       return
     }
@@ -86,17 +87,16 @@ export default function Community() {
     // Save posts to localStorage
     localStorage.setItem("communityPosts", JSON.stringify(updatedPosts))
 
-    // Update user's post count
-    const updatedUser = { ...user, communityPosts: user.communityPosts + 1 }
-    setUser(updatedUser)
-    localStorage.setItem("currentUser", JSON.stringify(updatedUser))
-
-    // Update in allUsers as well
-    const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
-    const userIndex = allUsers.findIndex((u: any) => u.id === user.id)
-    if (userIndex !== -1) {
-      allUsers[userIndex] = updatedUser
-      localStorage.setItem("allUsers", JSON.stringify(allUsers))
+    // Update user's post count using persistent function
+    if (user) {
+      const updatedUser = updateUserData(user.id, {
+        communityPosts: (user.communityPosts || 0) + 1
+      })
+      
+      if (updatedUser) {
+        setUser(updatedUser)
+        localStorage.setItem("currentUser", JSON.stringify(updatedUser))
+      }
     }
 
     // Reset form

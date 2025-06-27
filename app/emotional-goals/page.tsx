@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Heart, Plus, Target, Calendar, TrendingUp, CheckCircle, Pause, Play, Trash2 } from 'lucide-react'
 import Navigation from "@/components/navigation"
+import { updateUserData } from "@/lib/local-storage"
 
 interface User {
   id: string
@@ -60,7 +61,7 @@ export default function EmotionalGoals() {
     }
 
     const parsedUser = JSON.parse(userData)
-    if (parsedUser.userType !== "patient") {
+    if (parsedUser.userType !== "patient" && parsedUser.user_type !== "patient") {
       router.push("/")
       return
     }
@@ -86,17 +87,15 @@ export default function EmotionalGoals() {
     const updatedGoals = [...goals, goal]
     setGoals(updatedGoals)
 
-    // Update user data
+    // Update user data using persistent function
     if (user) {
-      const updatedUser = { ...user, emotionalGoals: updatedGoals }
-      localStorage.setItem("currentUser", JSON.stringify(updatedUser))
+      const updatedUser = updateUserData(user.id, {
+        emotionalGoals: updatedGoals
+      })
       
-      // Update in allUsers as well
-      const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
-      const userIndex = allUsers.findIndex((u: any) => u.id === user.id)
-      if (userIndex !== -1) {
-        allUsers[userIndex] = updatedUser
-        localStorage.setItem("allUsers", JSON.stringify(allUsers))
+      if (updatedUser) {
+        setUser(updatedUser)
+        localStorage.setItem("currentUser", JSON.stringify(updatedUser))
       }
     }
 
@@ -122,17 +121,15 @@ export default function EmotionalGoals() {
     )
     setGoals(updatedGoals)
 
-    // Update user data
+    // Update user data using persistent function
     if (user) {
-      const updatedUser = { ...user, emotionalGoals: updatedGoals }
-      localStorage.setItem("currentUser", JSON.stringify(updatedUser))
+      const updatedUser = updateUserData(user.id, {
+        emotionalGoals: updatedGoals
+      })
       
-      // Update in allUsers as well
-      const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
-      const userIndex = allUsers.findIndex((u: any) => u.id === user.id)
-      if (userIndex !== -1) {
-        allUsers[userIndex] = updatedUser
-        localStorage.setItem("allUsers", JSON.stringify(allUsers))
+      if (updatedUser) {
+        setUser(updatedUser)
+        localStorage.setItem("currentUser", JSON.stringify(updatedUser))
       }
     }
   }
@@ -148,17 +145,15 @@ export default function EmotionalGoals() {
     )
     setGoals(updatedGoals)
 
-    // Update user data
+    // Update user data using persistent function
     if (user) {
-      const updatedUser = { ...user, emotionalGoals: updatedGoals }
-      localStorage.setItem("currentUser", JSON.stringify(updatedUser))
+      const updatedUser = updateUserData(user.id, {
+        emotionalGoals: updatedGoals
+      })
       
-      // Update in allUsers as well
-      const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
-      const userIndex = allUsers.findIndex((u: any) => u.id === user.id)
-      if (userIndex !== -1) {
-        allUsers[userIndex] = updatedUser
-        localStorage.setItem("allUsers", JSON.stringify(allUsers))
+      if (updatedUser) {
+        setUser(updatedUser)
+        localStorage.setItem("currentUser", JSON.stringify(updatedUser))
       }
     }
   }
@@ -167,17 +162,15 @@ export default function EmotionalGoals() {
     const updatedGoals = goals.filter((goal) => goal.id !== goalId)
     setGoals(updatedGoals)
 
-    // Update user data
+    // Update user data using persistent function
     if (user) {
-      const updatedUser = { ...user, emotionalGoals: updatedGoals }
-      localStorage.setItem("currentUser", JSON.stringify(updatedUser))
+      const updatedUser = updateUserData(user.id, {
+        emotionalGoals: updatedGoals
+      })
       
-      // Update in allUsers as well
-      const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
-      const userIndex = allUsers.findIndex((u: any) => u.id === user.id)
-      if (userIndex !== -1) {
-        allUsers[userIndex] = updatedUser
-        localStorage.setItem("allUsers", JSON.stringify(allUsers))
+      if (updatedUser) {
+        setUser(updatedUser)
+        localStorage.setItem("currentUser", JSON.stringify(updatedUser))
       }
     }
   }
