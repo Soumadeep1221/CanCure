@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { FileText, AlertCircle, CheckCircle } from "lucide-react"
 import Navigation from "@/components/navigation"
+import { updateUserData } from "@/lib/local-storage"
 
 interface AssessmentData {
   age: string
@@ -150,14 +151,19 @@ export default function Assessment() {
 
     const riskAssessment = calculateRisk()
 
-    // Update user data
+    // Update user data using our persistent function
     const userData = localStorage.getItem("currentUser")
     if (userData) {
       const user = JSON.parse(userData)
-      user.assessmentCompleted = true
-      user.riskLevel = riskAssessment.riskLevel
-      user.lastAssessment = new Date().toISOString()
-      localStorage.setItem("currentUser", JSON.stringify(user))
+      const updatedUser = updateUserData(user.id, {
+        assessmentCompleted: true,
+        riskLevel: riskAssessment.riskLevel,
+        lastAssessment: new Date().toISOString(),
+      })
+      
+      if (updatedUser) {
+        localStorage.setItem("currentUser", JSON.stringify(updatedUser))
+      }
     }
 
     setResults(riskAssessment)

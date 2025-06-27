@@ -14,19 +14,21 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Calendar, Clock, Plus, CheckCircle, AlertCircle, Stethoscope, X } from "lucide-react"
 import Navigation from "@/components/navigation"
+import { getAppointments, saveAppointments, getUsers, saveUsers } from "@/lib/local-storage"
 
 interface Appointment {
   id: string
-  patientId: string
-  doctorId: string
-  doctorName: string
-  doctorSpecialization: string
-  date: string
-  time: string
+  patient_id: string
+  doctor_id: string
+  doctor_name: string
+  doctor_specialization: string
+  appointment_date: string
+  appointment_time: string
   reason: string
-  status: "scheduled" | "completed" | "cancelled"
+  status: "scheduled" | "completed" | "cancelled" | "accepted"
   notes?: string
-  createdAt: string
+  created_at: string
+  updated_at: string
 }
 
 interface Doctor {
@@ -79,6 +81,11 @@ export default function Appointments() {
     }
 
     const parsedUser = JSON.parse(userData)
+    if (parsedUser.userType !== "patient" && parsedUser.user_type !== "patient") {
+      router.push("/")
+      return
+    }
+
     setUser(parsedUser)
     loadAppointments(parsedUser.id)
     loadDoctors()
@@ -86,14 +93,16 @@ export default function Appointments() {
 
   const loadAppointments = (userId: string) => {
     const allAppointments = JSON.parse(localStorage.getItem("appointments") || "[]")
-    const userAppointments = allAppointments.filter((apt: Appointment) => apt.patientId === userId)
+    const userAppointments = allAppointments.filter((apt: Appointment) => apt.patient_id === userId)
     setAppointments(userAppointments)
   }
 
   const loadDoctors = () => {
-    const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
+    const allUsers = getUsers()
+    console.log("All users loaded:", allUsers)
+    
     const doctorUsers = allUsers
-      .filter((user: any) => user.userType === "doctor")
+      .filter((user: any) => user.userType === "doctor" || user.user_type === "doctor")
       .map((doctor: any) => ({
         id: doctor.id,
         name: doctor.name,
@@ -101,6 +110,8 @@ export default function Appointments() {
         email: doctor.email,
         isVerified: true,
       }))
+    
+    console.log("Doctors found:", doctorUsers)
     setDoctors(doctorUsers)
   }
 
@@ -125,24 +136,20 @@ export default function Appointments() {
 
     const appointment: Appointment = {
       id: Date.now().toString(),
-      patientId: user!.id,
-      doctorId: newAppointment.doctorId,
-      doctorName: selectedDoctor.name,
-      doctorSpecialization: selectedDoctor.specialization,
-      date: newAppointment.date,
-      time: newAppointment.time,
+      patient_id: user!.id,
+      doctor_id: newAppointment.doctorId,
+      doctor_name: selectedDoctor.name,
+      doctor_specialization: selectedDoctor.specialization,
+      appointment_date: newAppointment.date,
+      appointment_time: newAppointment.time,
       reason: newAppointment.reason.trim(),
       status: "scheduled",
-      createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     }
 
-    // Save appointment to localStorage
-    const allAppointments = JSON.parse(localStorage.getItem("appointments") || "[]")
-    allAppointments.push(appointment)
-    localStorage.setItem("appointments", JSON.stringify(allAppointments))
-
     // Create notification for doctor
-    const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
+    const allUsers = getUsers()
     const doctorIndex = allUsers.findIndex((u: any) => u.id === newAppointment.doctorId)
 
     if (doctorIndex !== -1) {
@@ -160,8 +167,15 @@ export default function Appointments() {
         allUsers[doctorIndex].notifications = []
       }
       allUsers[doctorIndex].notifications.push(notification)
-      localStorage.setItem("allUsers", JSON.stringify(allUsers))
+      
+      // Save updated users using our local storage function
+      saveUsers(allUsers)
     }
+
+    // Save appointment using our local storage functions
+    const allAppointments = getAppointments()
+    allAppointments.push(appointment)
+    saveAppointments(allAppointments)
 
     setAppointments([...appointments, appointment])
     setSuccess("Appointment request sent successfully! The doctor will review and respond soon.")
@@ -185,12 +199,8 @@ export default function Appointments() {
     )
     setAppointments(updatedAppointments)
 
-    // Update localStorage
-    const allAppointments = JSON.parse(localStorage.getItem("appointments") || "[]")
-    const updatedAllAppointments = allAppointments.map((apt: Appointment) =>
-      apt.id === appointmentId ? { ...apt, status: "cancelled" } : apt,
-    )
-    localStorage.setItem("appointments", JSON.stringify(updatedAllAppointments))
+    // Update using local storage functions
+    saveAppointments(updatedAppointments)
 
     setSuccess("Appointment cancelled successfully.")
     setTimeout(() => setSuccess(""), 3000)
@@ -227,9 +237,9 @@ export default function Appointments() {
   }
 
   const upcomingAppointments = appointments.filter(
-    (apt) => new Date(apt.date) >= new Date() && apt.status !== "cancelled",
+    (apt) => new Date(apt.appointment_date) >= new Date() && apt.status !== "cancelled",
   )
-  const pastAppointments = appointments.filter((apt) => new Date(apt.date) < new Date() || apt.status === "completed")
+  const pastAppointments = appointments.filter((apt) => new Date(apt.appointment_date) < new Date() || apt.status === "completed")
 
   return (
     <div className="min-h-screen bg-gray-950">
@@ -441,23 +451,23 @@ export default function Appointments() {
                         <div className="flex items-center gap-4">
                           <Avatar className="h-12 w-12">
                             <AvatarFallback className="bg-indigo-600 text-white">
-                              {appointment.doctorName
+                              {appointment.doctor_name
                                 .split(" ")
                                 .map((n) => n[0])
                                 .join("")}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <h3 className="font-semibold text-white">Dr. {appointment.doctorName}</h3>
-                            <p className="text-gray-400 text-sm">{appointment.doctorSpecialization}</p>
+                            <h3 className="font-semibold text-white">Dr. {appointment.doctor_name}</h3>
+                            <p className="text-gray-400 text-sm">{appointment.doctor_specialization}</p>
                             <div className="flex items-center gap-4 mt-1">
                               <span className="text-gray-400 text-sm flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
-                                {formatDate(appointment.date)}
+                                {formatDate(appointment.appointment_date)}
                               </span>
                               <span className="text-gray-400 text-sm flex items-center gap-1">
                                 <Clock className="h-4 w-4" />
-                                {appointment.time}
+                                {appointment.appointment_time}
                               </span>
                             </div>
                             <p className="text-gray-300 text-sm mt-2">{appointment.reason}</p>
@@ -499,23 +509,23 @@ export default function Appointments() {
                         <div className="flex items-center gap-4">
                           <Avatar className="h-12 w-12">
                             <AvatarFallback className="bg-gray-600 text-white">
-                              {appointment.doctorName
+                              {appointment.doctor_name
                                 .split(" ")
                                 .map((n) => n[0])
                                 .join("")}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <h3 className="font-semibold text-white">Dr. {appointment.doctorName}</h3>
-                            <p className="text-gray-400 text-sm">{appointment.doctorSpecialization}</p>
+                            <h3 className="font-semibold text-white">Dr. {appointment.doctor_name}</h3>
+                            <p className="text-gray-400 text-sm">{appointment.doctor_specialization}</p>
                             <div className="flex items-center gap-4 mt-1">
                               <span className="text-gray-400 text-sm flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
-                                {formatDate(appointment.date)}
+                                {formatDate(appointment.appointment_date)}
                               </span>
                               <span className="text-gray-400 text-sm flex items-center gap-1">
                                 <Clock className="h-4 w-4" />
-                                {appointment.time}
+                                {appointment.appointment_time}
                               </span>
                             </div>
                           </div>

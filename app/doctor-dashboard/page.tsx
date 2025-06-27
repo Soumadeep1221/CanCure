@@ -25,8 +25,23 @@ import {
   LogOut,
   ArrowLeft,
 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
-import type { User, Appointment, Assessment, EmotionalGoal } from "@/lib/supabase"
+import { 
+  getUsers, 
+  getAppointments, 
+  saveAppointments, 
+  getAssessments, 
+  getEmotionalGoals,
+  getAppointmentsByDoctor,
+  getPatientsByDoctor,
+  getAssessmentsByUser,
+  getEmotionalGoalsByUser,
+  saveUsers,
+  updateUserData,
+  type User, 
+  type Appointment, 
+  type Assessment, 
+  type EmotionalGoal 
+} from "@/lib/local-storage"
 
 interface Doctor extends User {
   user_type: "doctor"
@@ -65,7 +80,7 @@ export default function DoctorDashboard() {
     }
 
     const parsedUser = JSON.parse(userData)
-    if (parsedUser.userType !== "doctor") {
+    if (parsedUser.userType !== "doctor" && parsedUser.user_type !== "doctor") {
       router.push("/")
       return
     }
@@ -77,83 +92,48 @@ export default function DoctorDashboard() {
 
   const loadDoctorData = async (doctorData: Doctor) => {
     try {
-      // Load appointments from Supabase
-      const { data: appointmentsData, error: appointmentsError } = await supabase
-        .from("appointments")
-        .select("*")
-        .eq("doctor_id", doctorData.id)
-        .order("appointment_date", { ascending: true })
+      // Load appointments from local storage
+      const doctorAppointments = getAppointmentsByDoctor(doctorData.id)
+      setAppointments(doctorAppointments)
 
-      if (appointmentsError) {
-        console.error("Error loading appointments:", appointmentsError)
-        // Fallback to localStorage
-        const allAppointments = JSON.parse(localStorage.getItem("appointments") || "[]")
-        const doctorAppointments = allAppointments.filter((apt: Appointment) => apt.doctor_id === doctorData.id)
-        setAppointments(doctorAppointments)
-      } else {
-        setAppointments(appointmentsData || [])
-      }
+      // Load patients from local storage
+      const patientUsers = getUsers().filter((user: User) => user.user_type === "patient")
+      
+      // Get patients who have appointments with this doctor
+      const doctorPatients = patientUsers.filter((patient: User) =>
+        doctorAppointments.some((apt: Appointment) => apt.patient_id === patient.id),
+      )
 
-      // Load patients from Supabase
-      const { data: usersData, error: usersError } = await supabase.from("users").select("*").eq("user_type", "patient")
+      // Load additional data for each patient
+      const patientsWithData = doctorPatients.map((patient) => {
+        // Load assessments
+        const assessmentData = getAssessmentsByUser(patient.id)
+        const assessment = assessmentData[0] // Get the latest assessment
 
-      if (usersError) {
-        console.error("Error loading users:", usersError)
-        // Fallback to localStorage
-        const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
-        const patientUsers = allUsers.filter((user: any) => user.userType === "patient")
-        setPatients(patientUsers)
-      } else {
-        // Get patients who have appointments with this doctor
-        const doctorPatients =
-          usersData?.filter((patient: User) =>
-            (appointmentsData || []).some((apt: Appointment) => apt.patient_id === patient.id),
-          ) || []
+        // Load emotional goals
+        const goalsData = getEmotionalGoalsByUser(patient.id)
 
-        // Load additional data for each patient
-        const patientsWithData = await Promise.all(
-          doctorPatients.map(async (patient) => {
-            // Load assessments
-            const { data: assessmentData } = await supabase
-              .from("assessments")
-              .select("*")
-              .eq("user_id", patient.id)
-              .order("created_at", { ascending: false })
-              .limit(1)
+        return {
+          ...patient,
+          age: assessment?.age,
+          riskLevel: assessment?.risk_level,
+          lastAssessment: assessment?.created_at,
+          assessmentData: assessment,
+          emotionalGoals: goalsData || [],
+          communityActivity: Math.floor(Math.random() * 20), // Mock data
+          dietPlanActive: Math.random() > 0.5, // Mock data
+        }
+      })
 
-            // Load emotional goals
-            const { data: goalsData } = await supabase.from("emotional_goals").select("*").eq("user_id", patient.id)
-
-            const assessment = assessmentData?.[0]
-
-            return {
-              ...patient,
-              age: assessment?.age,
-              riskLevel: assessment?.risk_level,
-              lastAssessment: assessment?.created_at,
-              assessmentData: assessment,
-              emotionalGoals: goalsData || [],
-              communityActivity: Math.floor(Math.random() * 20), // Mock data
-              dietPlanActive: Math.random() > 0.5, // Mock data
-            }
-          }),
-        )
-
-        setPatients(patientsWithData)
-      }
+      setPatients(patientsWithData)
     } catch (error) {
       console.error("Error loading doctor data:", error)
       // Fallback to localStorage
-      const allAppointments = JSON.parse(localStorage.getItem("appointments") || "[]")
-      const doctorAppointments = allAppointments.filter((apt: Appointment) => apt.doctor_id === doctorData.id)
+      const doctorAppointments = getAppointmentsByDoctor(doctorData.id)
       setAppointments(doctorAppointments)
 
-      const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
-      const patientUsers = allUsers.filter((user: any) => user.userType === "patient")
-      const doctorPatients = patientUsers.filter((patient: any) =>
-        doctorAppointments.some((apt: Appointment) => apt.patient_id === patient.id),
-      )
-      setPatients(doctorPatients)
+      const patientUsers = getUsers().filter((user: User) => user.user_type === "patient")
+      setPatients(patientUsers)
     }
   }
 
@@ -164,29 +144,14 @@ export default function DoctorDashboard() {
     const newStatus = action === "accept" ? "accepted" : "cancelled"
 
     try {
-      // Update in Supabase
-      const { error } = await supabase
-        .from("appointments")
-        .update({
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", appointmentId)
+      // Update local state
+      const updatedAppointments = appointments.map((apt) =>
+        apt.id === appointmentId ? { ...apt, status: newStatus } : apt,
+      )
+      setAppointments(updatedAppointments)
 
-      if (error) {
-        console.error("Error updating appointment:", error)
-        // Fallback to localStorage update
-        updateAppointmentInLocalStorage(appointmentId, newStatus)
-      } else {
-        // Update local state
-        const updatedAppointments = appointments.map((apt) =>
-          apt.id === appointmentId ? { ...apt, status: newStatus } : apt,
-        )
-        setAppointments(updatedAppointments)
-
-        // Create notification for patient
-        await createNotificationForPatient(appointment, action)
-      }
+      // Create notification for patient
+      await createNotificationForPatient(appointment, action)
     } catch (error) {
       console.error("Error handling appointment action:", error)
       // Fallback to localStorage
@@ -201,11 +166,7 @@ export default function DoctorDashboard() {
     const updatedAppointments = appointments.map((apt) => (apt.id === appointmentId ? { ...apt, status } : apt))
     setAppointments(updatedAppointments)
 
-    const allAppointments = JSON.parse(localStorage.getItem("appointments") || "[]")
-    const updatedAllAppointments = allAppointments.map((apt: Appointment) =>
-      apt.id === appointmentId ? { ...apt, status } : apt,
-    )
-    localStorage.setItem("appointments", JSON.stringify(updatedAllAppointments))
+    saveAppointments(updatedAppointments)
   }
 
   const createNotificationForPatient = async (appointment: Appointment, action: "accept" | "reject") => {
@@ -221,13 +182,8 @@ export default function DoctorDashboard() {
     }
 
     try {
-      const { error } = await supabase.from("notifications").insert([notification])
-
-      if (error) {
-        console.error("Error creating notification:", error)
-        // Fallback to localStorage
-        createNotificationInLocalStorage(appointment, action)
-      }
+      // Create notification in local storage
+      createNotificationInLocalStorage(appointment, action)
     } catch (error) {
       console.error("Error creating notification:", error)
       createNotificationInLocalStorage(appointment, action)
@@ -235,7 +191,7 @@ export default function DoctorDashboard() {
   }
 
   const createNotificationInLocalStorage = (appointment: Appointment, action: "accept" | "reject") => {
-    const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
+    const allUsers = getUsers()
     const patientIndex = allUsers.findIndex((user: any) => user.id === appointment.patient_id)
 
     if (patientIndex !== -1) {
@@ -256,7 +212,7 @@ export default function DoctorDashboard() {
         allUsers[patientIndex].notifications = []
       }
       allUsers[patientIndex].notifications.push(notification)
-      localStorage.setItem("allUsers", JSON.stringify(allUsers))
+      saveUsers(allUsers)
     }
   }
 
@@ -298,14 +254,8 @@ export default function DoctorDashboard() {
     }
 
     try {
-      // Insert prescription into Supabase
-      const { error } = await supabase.from("prescriptions").insert([aiPrescription])
-
-      if (error) {
-        console.error("Error creating prescription:", error)
-        // Fallback to localStorage
-        savePrescriptionToLocalStorage(patient, aiPrescription)
-      }
+      // Save prescription to local storage
+      savePrescriptionToLocalStorage(patient, aiPrescription)
 
       // Create notification for patient
       await createPrescriptionNotification(patient)
@@ -322,7 +272,7 @@ export default function DoctorDashboard() {
   }
 
   const savePrescriptionToLocalStorage = (patient: Patient, prescription: any) => {
-    const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
+    const allUsers = getUsers()
     const patientIndex = allUsers.findIndex((user: any) => user.id === patient.id)
 
     if (patientIndex !== -1) {
@@ -333,23 +283,32 @@ export default function DoctorDashboard() {
         ...prescription,
         id: `rx${Date.now()}`,
       })
-      localStorage.setItem("allUsers", JSON.stringify(allUsers))
+      saveUsers(allUsers)
     }
   }
 
   const createPrescriptionNotification = async (patient: Patient) => {
     const notification = {
-      user_id: patient.id,
+      id: Date.now().toString(),
       type: "prescription_received",
       title: "New Prescription Available",
       message: `Dr. ${doctor?.name} has issued a new prescription for you. Check your prescriptions page for details.`,
+      timestamp: new Date().toISOString(),
+      read: false,
+      relatedId: `rx${Date.now()}`,
     }
 
     try {
-      const { error } = await supabase.from("notifications").insert([notification])
+      // Create notification in local storage
+      const allUsers = getUsers()
+      const patientIndex = allUsers.findIndex((user: any) => user.id === patient.id)
 
-      if (error) {
-        console.error("Error creating prescription notification:", error)
+      if (patientIndex !== -1) {
+        if (!allUsers[patientIndex].notifications) {
+          allUsers[patientIndex].notifications = []
+        }
+        allUsers[patientIndex].notifications.push(notification)
+        saveUsers(allUsers)
       }
     } catch (error) {
       console.error("Error creating prescription notification:", error)
@@ -393,17 +352,26 @@ export default function DoctorDashboard() {
 
   const sendClinicalReport = async (patient: Patient) => {
     const notification = {
-      user_id: patient.id,
+      id: Date.now().toString(),
       type: "clinical_report",
       title: "Clinical Report Received",
       message: `Dr. ${doctor?.name} has sent you a clinical report. Please review it in your dashboard.`,
+      timestamp: new Date().toISOString(),
+      read: false,
+      relatedId: `report${Date.now()}`,
     }
 
     try {
-      const { error } = await supabase.from("notifications").insert([notification])
+      // Create notification in local storage
+      const allUsers = getUsers()
+      const patientIndex = allUsers.findIndex((user: any) => user.id === patient.id)
 
-      if (error) {
-        console.error("Error sending clinical report notification:", error)
+      if (patientIndex !== -1) {
+        if (!allUsers[patientIndex].notifications) {
+          allUsers[patientIndex].notifications = []
+        }
+        allUsers[patientIndex].notifications.push(notification)
+        saveUsers(allUsers)
       }
     } catch (error) {
       console.error("Error sending clinical report:", error)

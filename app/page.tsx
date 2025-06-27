@@ -35,7 +35,7 @@ import {
   MessageSquare,
   HelpCircle,
 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { getUsers, saveUsers, type User, initializeSampleData } from "@/lib/local-storage"
 
 export default function HomePage() {
   const [isSignInOpen, setIsSignInOpen] = useState(false)
@@ -62,6 +62,9 @@ export default function HomePage() {
   const router = useRouter()
 
   useEffect(() => {
+    // Initialize sample data
+    initializeSampleData()
+    
     // Check if user is already logged in
     const currentUser = localStorage.getItem("currentUser")
     if (currentUser) {
@@ -80,43 +83,28 @@ export default function HomePage() {
     setError("")
 
     try {
-      // Try Supabase first
-      const { data, error: supabaseError } = await supabase
-        .from("users")
-        .select("*")
-        .eq("email", formData.email)
-        .eq("user_type", userType)
-        .single()
+      // Use local storage for authentication
+      const allUsers = getUsers()
+      const user = allUsers.find(
+        (u: User) => u.email === formData.email && u.password === formData.password && u.user_type === userType,
+      )
 
-      if (supabaseError || !data) {
-        // Fallback to localStorage
-        const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
-        const user = allUsers.find(
-          (u: any) => u.email === formData.email && u.password === formData.password && u.userType === userType,
-        )
-
-        if (user) {
-          localStorage.setItem("currentUser", JSON.stringify(user))
-          if (userType === "doctor") {
-            router.push("/doctor-dashboard")
-          } else {
-            router.push("/dashboard")
-          }
+      if (user) {
+        // Always get the latest user data from storage to preserve any updates
+        const latestUser = allUsers.find(u => u.id === user.id)
+        if (latestUser) {
+          localStorage.setItem("currentUser", JSON.stringify(latestUser))
         } else {
-          setError("Invalid credentials or user type")
+          localStorage.setItem("currentUser", JSON.stringify(user))
+        }
+        
+        if (userType === "doctor") {
+          router.push("/doctor-dashboard")
+        } else {
+          router.push("/dashboard")
         }
       } else {
-        // Verify password (in real app, this would be hashed)
-        if (data.password === formData.password) {
-          localStorage.setItem("currentUser", JSON.stringify(data))
-          if (userType === "doctor") {
-            router.push("/doctor-dashboard")
-          } else {
-            router.push("/dashboard")
-          }
-        } else {
-          setError("Invalid credentials")
-        }
+        setError("Invalid credentials or user type")
       }
     } catch (err) {
       setError("Sign in failed. Please try again.")
@@ -131,53 +119,33 @@ export default function HomePage() {
     setError("")
 
     try {
-      const newUser = {
+      const allUsers = getUsers()
+      const existingUser = allUsers.find((u: User) => u.email === formData.email)
+
+      if (existingUser) {
+        setError("User with this email already exists")
+        setIsLoading(false)
+        return
+      }
+
+      const newUser: User = {
+        id: Date.now().toString(),
         name: formData.name,
         email: formData.email,
         password: formData.password,
         user_type: userType,
+        is_verified: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
         ...(userType === "doctor" && {
           specialization: formData.specialization,
           medical_license: formData.medicalLicense,
-          is_verified: true,
         }),
       }
 
-      // Try to insert into Supabase
-      const { data, error: supabaseError } = await supabase.from("users").insert([newUser]).select().single()
-
-      if (supabaseError) {
-        // Check if user already exists
-        if (supabaseError.code === "23505") {
-          setError("User with this email already exists")
-          setIsLoading(false)
-          return
-        }
-
-        // Fallback to localStorage
-        const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
-        const existingUser = allUsers.find((u: any) => u.email === formData.email)
-
-        if (existingUser) {
-          setError("User with this email already exists")
-          setIsLoading(false)
-          return
-        }
-
-        const localUser = {
-          id: Date.now().toString(),
-          ...newUser,
-          userType: userType, // Keep compatibility with localStorage format
-          createdAt: new Date().toISOString(),
-          notifications: [],
-        }
-
-        allUsers.push(localUser)
-        localStorage.setItem("allUsers", JSON.stringify(allUsers))
-        localStorage.setItem("currentUser", JSON.stringify(localUser))
-      } else {
-        localStorage.setItem("currentUser", JSON.stringify(data))
-      }
+      allUsers.push(newUser)
+      saveUsers(allUsers)
+      localStorage.setItem("currentUser", JSON.stringify(newUser))
 
       if (userType === "doctor") {
         router.push("/doctor-dashboard")

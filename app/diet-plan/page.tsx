@@ -19,6 +19,7 @@ import {
   Zap,
   CheckCircle,
 } from "lucide-react"
+import { updateUserData } from "@/lib/local-storage"
 
 interface User {
   id: string
@@ -26,6 +27,8 @@ interface User {
   email: string
   age: number
   dietPlanGenerated: boolean
+  userType: string
+  user_type: string
 }
 
 interface Meal {
@@ -72,6 +75,11 @@ export default function DietPlanPage() {
     }
 
     const parsedUser = JSON.parse(userData)
+    if (parsedUser.userType !== "patient" && parsedUser.user_type !== "patient") {
+      router.push("/")
+      return
+    }
+
     setUser(parsedUser)
 
     // Load existing diet plan
@@ -905,17 +913,14 @@ export default function DietPlanPage() {
     // Save to localStorage
     localStorage.setItem(`dietPlan_${user!.id}`, JSON.stringify(weeklyPlan))
 
-    // Update user's diet plan status
-    const updatedUser = { ...user!, dietPlanGenerated: true }
-    localStorage.setItem("currentUser", JSON.stringify(updatedUser))
-    setUser(updatedUser)
-
-    // Update all users data
-    const allUsers = JSON.parse(localStorage.getItem("allUsers") || "[]")
-    const userIndex = allUsers.findIndex((u: User) => u.id === user!.id)
-    if (userIndex !== -1) {
-      allUsers[userIndex] = updatedUser
-      localStorage.setItem("allUsers", JSON.stringify(allUsers))
+    // Update user's diet plan status using persistent function
+    const updatedUser = updateUserData(user!.id, {
+      dietPlanGenerated: true
+    })
+    
+    if (updatedUser) {
+      setUser(updatedUser)
+      localStorage.setItem("currentUser", JSON.stringify(updatedUser))
     }
 
     setIsGenerating(false)
